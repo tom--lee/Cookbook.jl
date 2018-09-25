@@ -9,5 +9,3 @@ Draws inspiration from GNU Make.
 
 See `test/runtests.jl` for example usage.
 
-Not yet suitable for use in production.
-
