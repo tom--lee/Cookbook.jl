@@ -11,7 +11,7 @@ export make, prepare, prepare!
 abstract type Recipe end
 
 macro Recipe(name::Symbol, body::Expr)
-    @show _Recipe_expr(name, body)
+    _Recipe_expr(name, body)
 end
 
 function _Recipe_expr(name::Symbol, body::Expr)
