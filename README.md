@@ -9,5 +9,7 @@ A Julia package to aid in the creation of data processing pipelines.
 
 Draws inspiration from GNU Make.
 
-Not yet suitable for public consumption.
+See `test/runtests.jl` for example usage.
+
+Not yet suitable for use in production.
 

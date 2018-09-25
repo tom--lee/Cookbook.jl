@@ -3,11 +3,131 @@ module Cookbook
 
 using Distributed
 using LightGraphs
+using MacroTools
 
-export Recipe
-export make
+export Recipe, @Recipe
+export make, prepare, prepare!
 
 abstract type Recipe end
+
+macro Recipe(name::Symbol, body::Expr)
+    @show _Recipe_expr(name, body)
+end
+
+function _Recipe_expr(name::Symbol, body::Expr)
+
+    @capture body begin parts__ end
+
+    inputs = map(parts) do part
+        @capture part inputs = begin x__ end
+        x
+    end |> x->filter(!(==(nothing)), x)
+    length(inputs) == 1 || error("Missing inputs specification")
+
+    outputs = map(parts) do part
+        @capture part outputs = begin x__ end
+        x
+    end |> x->filter(!(==(nothing)), x)
+    length(outputs) == 1 || error("Missing inputs specification")
+
+    args_list = map(parts) do part
+        @capture part args = begin x__ end
+        x
+    end |> x->filter(!(==(nothing)), x)
+
+    inputs_type = _named_type(inputs[1])
+    outputs_type = _named_type(outputs[1])
+
+    make_lines = filter(parts) do part
+        !(  @capture(part, inputs=begin x__ end) ||
+            @capture(part, outputs= begin x__ end) ||
+            @capture(part, args= begin x__ end)
+        )
+    end
+
+    args = if length(args_list) > 0
+        map(args_list[1]) do x
+            @capture x (a_::T_,doc_)
+            :($a::$T)
+        end
+    else
+        :()
+    end
+
+    _name = :($(esc(name)))
+
+    quote
+        struct $(_name) <: Recipe
+            inputs::$(inputs_type)
+            outputs::$(outputs_type)
+            $(args...)
+        end
+        function Cookbook.make(
+            args::$(_name),
+            inputs::$(inputs_type),
+            outputs::$(outputs_type),
+        )
+            $(make_lines...)
+            nothing
+        end
+    end
+end
+
+
+function _named_type(data)
+    names = tuple( (map(data) do x
+        @capture x (a_...,doc_) | (a_,doc_)
+        a
+    end)... )
+    isvector = map(data) do x
+        @capture x (a_...,doc_)
+    end
+    types = map(isvector) do x
+        ifelse(x, Vector{String}, String)
+    end
+    :(
+        NamedTuple{$(names),Tuple{$(types...),}}
+    )
+end
+
+input_names(recipe::Type{T}) where T  = fieldtype(T, :inputs).names
+output_names(recipe::Type{T}) where T  = fieldtype(T, :outputs).names
+function arg_names(recipe::Type{T}) where T<:Recipe
+    filter(collect(fieldnames(T))) do x
+        !(x in (:inputs, :outputs))
+    end |> collect
+end
+
+function prepare(recipe::Type{T}; kwargs...) where T
+    prepare(recipe, kwargs)
+end
+
+function prepare(recipe::Type{T}, kwargs) where T
+    inputs_list = [ input=>kwargs[input] for input in input_names(T) ]
+    outputs_list = [ output=>kwargs[output] for output in output_names(T) ]
+    inputs_tuple = NamedTuple{
+        tuple(map(x->x[1], inputs_list)...)
+    }( 
+        tuple(map(x->x[2], inputs_list)...)
+    )
+    outputs_tuple = NamedTuple{
+        tuple(map(x->x[1], outputs_list)...)
+    }( 
+        tuple(map(x->x[2], outputs_list)...)
+    )
+    outputs_list = [ output=>kwargs[output] for output in output_names(T) ]
+    args = [ kwargs[arg] for arg in arg_names(T) ]
+    T(inputs_tuple, outputs_tuple, args...)
+end
+
+function prepare!(recipes, recipe::Type{T}; kwargs...) where T<:Recipe
+    r = prepare(recipe, kwargs)
+    push!(recipes, r)
+end
+
+function make(recipe::Recipe)
+    make(recipe, recipe.inputs, recipe.outputs)
+end
 
 function _print_item(io::IO, item::String; level = 1)
     for i in 1:level+1
@@ -25,19 +145,19 @@ end
 function Base.show(io::IO, ::MIME"text/plain", x::Recipe)
     println(io, "Recipe for $(typeof(x))")
     println(io, "  Products:")
-    for product in pairs(x.products)
+    for output in pairs(x.outputs)
         println(io, "  ")
-        print(io, string( first(product) ,":\n"))
-        _print_item(io, last(product))
+        print(io, string( first(output) ,":\n"))
+        _print_item(io, last(output))
     end
     println(io, "  Dependencies: ")
-    for dep in pairs(x.deps)
+    for input in pairs(x.inputs)
         println(io, "  ")
-        print(io, string( first(dep) ,":\n"))
-        _print_item(io, last(dep))
+        print(io, string( first(input) ,":\n"))
+        _print_item(io, last(input))
     end
     for field in fieldnames(typeof(x))
-        if field != :products && field != :deps
+        if field != :outputs && field != :inputs
             println(io, "$(field) = $(getfield(x,field))")
         end
     end
@@ -52,41 +172,46 @@ end
 
 is_stale(::Any; err = false) = true
 
-function is_stale(recipe::Recipe, product::String, dep::String)
-    if !ispath(dep)
-        if ispath(product)
-            @debug "Missing recipe dependency for extant product." recipe dep
+function is_stale(recipe::Recipe, output::String, input::String)
+    if !ispath(input)
+        if ispath(output)
+            @debug "Missing recipe input for extant output." recipe input
             false
         else
-            @error "Missing recipe dependency." recipe dep
-            error("Missing dependency")
+            @error "Missing recipe input." recipe input
+            error("Missing input")
             true
         end
-    elseif !ispath(product)
-        @info "Recipe is stale due to missing product" recipe product
+    elseif !ispath(output)
+        @info "Recipe is stale due to missing output" recipe output
         true
-    elseif lastmodified(product) < lastmodified(dep)
-        @info "Recipe is stale due to new dependency" recipe dep
+    elseif lastmodified(output) < lastmodified(input)
+        @info "Recipe is stale due to new input" recipe input
         true
     else
         false
     end
 end
 
-function is_stale(recipe::Recipe, product::String, deps)
-    mapreduce(|, deps) do dep
-        is_stale(recipe, product, dep)
+function is_stale(recipe::Recipe, output::String, inputs)
+    mapreduce(|, inputs) do input
+        is_stale(recipe, output, input)
     end
 end
-function is_stale(recipe::Recipe, products, dep::String)
-    mapreduce(|, products) do product
-        is_stale(recipe, product, dep)
+function is_stale(recipe::Recipe, outputs, input::String)
+    mapreduce(|, outputs) do output
+        is_stale(recipe, output, input)
+    end
+end
+function is_stale(recipe::Recipe, outputs, input)
+    mapreduce(|, outputs) do output
+        is_stale(recipe, output, input)
     end
 end
 
 function is_stale(recipe::Recipe; err=false)
-    for product in recipe.products, dep in recipe.deps
-        if is_stale(recipe, product, dep)
+    for output in recipe.outputs, input in recipe.inputs
+        if is_stale(recipe, output, input)
             if err
                 error("Recipe should not be stale")
             end
@@ -96,41 +221,41 @@ function is_stale(recipe::Recipe; err=false)
     false
 end
 
-function add_dep!(graph, product2recipe, product_idx::Int, dependency)
-    if dependency isa String
-        if haskey(product2recipe, dependency)
-            j = product2recipe[dependency]
-            add_edge!(graph, product_idx, j)
-        elseif !ispath(dependency)
-            error("Missing dependency:\n  $dependency")
+function add_input!(graph, output2recipe, output_idx::Int, input)
+    if input isa String
+        if haskey(output2recipe, input)
+            j = output2recipe[input]
+            add_edge!(graph, output_idx, j)
+        elseif !ispath(input)
+            error("Missing input:\n  $input")
         end
     else
-        for dep in dependency
-            if haskey(product2recipe, dep)
-                j = product2recipe[dep]
-                add_edge!(graph, product_idx, j)
-            elseif !ispath(dep)
-                error("Missing dependency:\n  $dep")
+        for input in input
+            if haskey(output2recipe, input)
+                j = output2recipe[input]
+                add_edge!(graph, output_idx, j)
+            elseif !ispath(input)
+                error("Missing input:\n  $input")
             end
         end
     end
     nothing
 end
 
-function make_graph(product2recipe, num_recipes, dependencies)
+function make_graph(output2recipe, num_recipes, inputs)
     graph = SimpleDiGraph(num_recipes)
-    products = collect(keys(product2recipe))
-    for product in products
-        i = product2recipe[product]
-        for dependency in dependencies[i]
-            add_dep!(graph, product2recipe, i::Int, dependency)
+    outputs = collect(keys(output2recipe))
+    for output in outputs
+        i = output2recipe[output]
+        for input in inputs[i]
+            add_input!(graph, output2recipe, i::Int, input)
         end
     end
     graph
 end
 
 
-#returns recipes that are not already in order and for which all the dependencies
+#returns recipes that are not already in order and for which all the inputs
 #are already in `order`
 function recipe_order(graph)
     order = []
@@ -164,29 +289,29 @@ function recipe_order(graph)
 end
 
 function make(recipes::Vector; maximum_running = 1, distributed = false)
-    product2recipe = Dict{String, Int}()
-    @info "gather products"
-    for (v,recipe) in enumerate(recipes), product in recipe.products
-        if product isa String
-            if haskey(product2recipe, product)
-                error("The product $product is produced by multiple recipes.")
+    output2recipe = Dict{String, Int}()
+    @info "gather outputs"
+    for (v,recipe) in enumerate(recipes), output in recipe.outputs
+        if output isa String
+            if haskey(output2recipe, output)
+                error("The output $output is produced by multiple recipes.")
             end
-            product2recipe[product] = v
+            output2recipe[output] = v
         else
-            for prod in product
-                if haskey(product2recipe, prod)
-                    error("The product $prod is produced by multiple recipes.")
+            for prod in output
+                if haskey(output2recipe, prod)
+                    error("The output $prod is produced by multiple recipes.")
                 end
-                product2recipe[prod] = v
+                output2recipe[prod] = v
             end
         end
     end
     @info "make graph"
-    dependencies = [ recipe.deps for recipe in recipes ]
-    graph = make_graph(product2recipe, length(recipes), dependencies)
-    @info "check for circular deps "
+    inputs = [ recipe.inputs for recipe in recipes ]
+    graph = make_graph(output2recipe, length(recipes), inputs)
+    @info "check for circular inputs "
     if has_self_loops(graph)
-        error("Circular dependencies detected")
+        error("Circular inputs detected")
     end
 
     @info "ordering recipes"
@@ -197,7 +322,7 @@ function make(recipes::Vector; maximum_running = 1, distributed = false)
     @sync for v in order 
         recipe = recipes[v]
        #if recipe isa Time_Averaged_RMSD
-       #    @show recipe.products
+       #    @show recipe.outputs
        #end
         states = [t.state for t in values(tasks)]
         abort = false
@@ -220,11 +345,11 @@ function make(recipes::Vector; maximum_running = 1, distributed = false)
             #@info "task starting"
             if is_stale(recipe)
                 @info "Making recipe" recipe
-                for product in recipe.products
-                    if product isa String
-                        mkpath(dirname(product))
+                for output in recipe.outputs
+                    if output isa String
+                        mkpath(dirname(output))
                     else
-                        for p in product
+                        for p in output
                             mkpath(dirname(p))
                         end
                     end
