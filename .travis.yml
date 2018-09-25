@@ -4,7 +4,6 @@ os:
   - osx
 julia:
   - 1.0
-  - 0.7
   - nightly
 matrix:
   allow_failures:
@@ -13,5 +12,5 @@ matrix:
 notifications:
   email: false
 after_success:
-    - julia -e 'cd(Pkg.dir("Cookbook")); using Pkg; Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())';
+    - julia -e 'import Pkg; Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())';
 
