@@ -15,20 +15,21 @@ using Cookbook
     args = begin
         header::String, "A header line to print at the top of each file"
     end
-
-    @assert length(outputs.b) == length(inputs.d)
-    cstr = open(x->read(x, String), inputs.c)
-    open(outputs.a, "w") do f
-        print(f, args.header)
-        print(f, reverse(cstr))
-        print(f, "\n")
-    end
-    for (bi, di)  in zip(outputs.b,inputs.d)
-        dstr = open(x->read(x, String), di)
-        open(bi, "w") do f
+    begin
+        @assert length(outputs.b) == length(inputs.d)
+        cstr = open(x->read(x, String), inputs.c)
+        open(outputs.a, "w") do f
             print(f, args.header)
-            print(f, reverse(dstr))
+            print(f, reverse(cstr))
             print(f, "\n")
+        end
+        for (bi, di)  in zip(outputs.b,inputs.d)
+            dstr = open(x->read(x, String), di)
+            open(bi, "w") do f
+                print(f, args.header)
+                print(f, reverse(dstr))
+                print(f, "\n")
+            end
         end
     end
 end

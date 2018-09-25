@@ -38,12 +38,7 @@ function _Recipe_expr(name::Symbol, body::Expr)
     inputs_type = _named_type(inputs[1])
     outputs_type = _named_type(outputs[1])
 
-    make_lines = filter(parts) do part
-        !(  @capture(part, inputs=begin x__ end) ||
-            @capture(part, outputs= begin x__ end) ||
-            @capture(part, args= begin x__ end)
-        )
-    end
+    make_block = parts[end]
 
     args = if length(args_list) > 0
         map(args_list[1]) do x
@@ -54,9 +49,9 @@ function _Recipe_expr(name::Symbol, body::Expr)
         :()
     end
 
-    _name = :($(esc(name)))
+    _name = name #:($(esc(name)))
 
-    quote
+    esc(quote
         struct $(_name) <: Recipe
             inputs::$(inputs_type)
             outputs::$(outputs_type)
@@ -67,10 +62,11 @@ function _Recipe_expr(name::Symbol, body::Expr)
             inputs::$(inputs_type),
             outputs::$(outputs_type),
         )
-            $(make_lines...)
+            $make_block
             nothing
         end
     end
+   )
 end
 
 
