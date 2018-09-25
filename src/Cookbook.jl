@@ -190,8 +190,13 @@ function is_stale(recipe::Recipe, output::String, input::String)
 end
 
 function is_stale(recipe::Recipe, output::String, inputs)
-    mapreduce(|, inputs) do input
-        is_stale(recipe, output, input)
+    if isempty(inputs)
+        @debug "Recipe has no inputs" recipe
+        false
+    else
+        mapreduce(|, inputs) do input
+            is_stale(recipe, output, input)
+        end
     end
 end
 function is_stale(recipe::Recipe, outputs, input::String)
