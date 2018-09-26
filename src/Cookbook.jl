@@ -289,13 +289,14 @@ function recipe_order(graph)
     order
 end
 
-function make(recipes::Vector; maximum_running = 1, distributed = false)
+
+function map_outputs_to_recipes(recipes)
     output2recipe = Dict{String, Int}()
-    @info "gather outputs"
     for (v,recipe) in enumerate(recipes), output in recipe.outputs
         if output isa String
             if haskey(output2recipe, output)
-                error("The output $output is produced by multiple recipes.")
+                @error "An output is produced by multiple recipes." output recipeA = recipes[output2recipe[output]] recipeB=recipe
+                error("An output is produced by multiple recipes.")
             end
             output2recipe[output] = v
         else
@@ -307,6 +308,12 @@ function make(recipes::Vector; maximum_running = 1, distributed = false)
             end
         end
     end
+    output2recipe
+end
+
+function make(recipes::Vector; maximum_running = 1, distributed = false)
+    @info "gather outputs"
+    output2recipe = map_outputs_to_recipes(recipes)
     @info "make graph"
     inputs = [ recipe.inputs for recipe in recipes ]
     graph = make_graph(output2recipe, length(recipes), inputs)
