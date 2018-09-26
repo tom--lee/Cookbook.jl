@@ -1,7 +1,7 @@
 name = "Cookbook"
 uuid = "6a10495e-bd66-11e8-3941-0b4fbbfb4e16"
 authors = ["Tom Lee <contact@tomlee.com.au>"]
-version = "0.2.0"
+version = "0.1.0"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
