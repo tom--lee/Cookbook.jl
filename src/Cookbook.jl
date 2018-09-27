@@ -197,10 +197,19 @@ function is_stale(recipe::Recipe, output::String, input::String)
     end
 end
 
+function is_stale(recipe::Recipe, output::String, input::Nothing)
+    if !ispath(output)
+        @info "Recipe is stale due to missing output" recipe output
+        true
+    else
+        false
+    end
+end
+
 function is_stale(recipe::Recipe, output::String, inputs)
     if isempty(inputs)
-        @debug "Recipe has no inputs" recipe
-        false
+        @info "Recipe has no inputs" recipe
+        is_stale(recipe, output, nothing)
     else
         mapreduce(|, inputs) do input
             is_stale(recipe, output, input)
