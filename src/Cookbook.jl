@@ -113,6 +113,14 @@ function prepare(recipe::Type{T}, kwargs) where T
     )
     outputs_list = [ output=>kwargs[output] for output in output_names(T) ]
     args = [ kwargs[arg] for arg in arg_names(T) ]
+
+    for (name,input) in pairs(inputs_tuple)
+        if input isa Vector && isempty(input)
+            @error "Empty inputs list" name input recipe
+            error("Empty inputs list")
+        end
+    end
+
     T(inputs_tuple, outputs_tuple, args...)
 end
 
