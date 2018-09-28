@@ -55,6 +55,7 @@ function _Recipe_expr(name::Symbol, body::Expr)
         struct $(_name) <: Recipe
             inputs::$(inputs_type)
             outputs::$(outputs_type)
+            stacktrace::Array{Base.StackTraces.StackFrame,1}
             $(args...)
         end
         function Cookbook.make(
@@ -90,7 +91,7 @@ input_names(recipe::Type{T}) where T  = fieldtype(T, :inputs).names
 output_names(recipe::Type{T}) where T  = fieldtype(T, :outputs).names
 function arg_names(recipe::Type{T}) where T<:Recipe
     filter(collect(fieldnames(T))) do x
-        !(x in (:inputs, :outputs))
+        !(x in (:inputs, :outputs, :stacktrace))
     end |> collect
 end
 
@@ -121,7 +122,7 @@ function prepare(recipe::Type{T}, kwargs) where T
         end
     end
 
-    T(inputs_tuple, outputs_tuple, args...)
+    T(inputs_tuple, outputs_tuple, stacktrace(), args...)
 end
 
 function prepare!(recipes, recipe::Type{T}; kwargs...) where T<:Recipe
@@ -146,7 +147,7 @@ function _print_item(io::IO, items; level = 1)
     end
 end
 
-function Base.show(io::IO, ::MIME"text/plain", x::Recipe)
+function Base.show(io::IO, dt::MIME"text/plain", x::Recipe)
     println(io, "Recipe for $(typeof(x))")
     println(io, "  Products:")
     for output in pairs(x.outputs)
@@ -161,10 +162,13 @@ function Base.show(io::IO, ::MIME"text/plain", x::Recipe)
         _print_item(io, last(input))
     end
     for field in fieldnames(typeof(x))
-        if field != :outputs && field != :inputs
+        if !(field in (:outputs, :inputs, :stacktrace))
             println(io, "$(field) = $(getfield(x,field))")
         end
     end
+    #if length(x.stacktrace)>5
+    #    show(io, dt, x.stacktrace[1:end-5])
+    #end
     nothing
 end
 
