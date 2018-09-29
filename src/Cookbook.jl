@@ -166,9 +166,9 @@ function Base.show(io::IO, dt::MIME"text/plain", x::Recipe)
             println(io, "$(field) = $(getfield(x,field))")
         end
     end
-    #if length(x.stacktrace)>5
-    #    show(io, dt, x.stacktrace[1:end-5])
-    #end
+    if :stacktrace in fieldnames(typeof(x)) && length(x.stacktrace)>5
+        show(io, dt, x.stacktrace[1:end-5])
+    end
     nothing
 end
 
