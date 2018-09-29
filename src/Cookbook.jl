@@ -248,16 +248,12 @@ function add_input!(graph, output2recipe, output_idx::Int, input)
         if haskey(output2recipe, input)
             j = output2recipe[input]
             add_edge!(graph, output_idx, j)
-        elseif !ispath(input)
-            error("Missing input:\n  $input")
         end
     else
         for input in input
             if haskey(output2recipe, input)
                 j = output2recipe[input]
                 add_edge!(graph, output_idx, j)
-            elseif !ispath(input)
-                error("Missing input:\n  $input")
             end
         end
     end
