@@ -55,7 +55,6 @@ function _Recipe_expr(name::Symbol, body::Expr)
         struct $(_name) <: Recipe
             inputs::$(inputs_type)
             outputs::$(outputs_type)
-            stacktrace::Array{Base.StackTraces.StackFrame,1}
             $(args...)
         end
         function Cookbook.make(
@@ -122,7 +121,7 @@ function prepare(recipe::Type{T}, kwargs) where T
         end
     end
 
-    T(inputs_tuple, outputs_tuple, stacktrace(), args...)
+    T(inputs_tuple, outputs_tuple, args...)
 end
 
 function prepare!(recipes, recipe::Type{T}; kwargs...) where T<:Recipe
